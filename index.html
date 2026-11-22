@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Google AI BG Remover (Offline)</title>
+    <!-- PWA Theme Color & Meta -->
+    <meta name="theme-color" content="#05050a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link id="pwa-manifest" rel="manifest" href="">
+
+    <!-- Google Fonts: Inter & Orbitron for Cyberpunk Header -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@600;800&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        cyber: ['Orbitron', 'sans-serif'],
+                    },
+                    colors: {
+                        cyber: {
+                            bg: '#05050a',
+                            card: '#0d0e17',
+                            border: '#1e2235',
+                            blue: '#00f3ff',
+                            blueDark: '#0088ff',
+                            purple: '#bc13fe'
+                        }
+                    },
+                    boxShadow: {
+                        'neon': '0 0 15px rgba(0, 243, 255, 0.4), 0 0 30px rgba(0, 243, 255, 0.15)',
+                        'neon-strong': '0 0 20px rgba(0, 243, 255, 0.7), 0 0 40px rgba(0, 243, 255, 0.3)',
+                        'neon-inner': 'inset 0 0 15px rgba(0, 243, 255, 0.15)',
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- MediaPipe CDNs -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/selfie_segmentation.js" crossorigin="anonymous"></script>
+
+    <style>
+        /* Custom Cyberpunk Utilities & Transparency Checkerboard */
+        body {
+            background-color: #05050a;
+            background-image: 
+                radial-gradient(circle at 15% 15%, rgba(0, 243, 255, 0.06) 0%, transparent 40%),
+                radial-gradient(circle at 85% 85%, rgba(188, 19, 254, 0.06) 0%, transparent 40%);
+            color: #e2e8f0;
+            overflow-x: hidden;
+        }
+
+        .checkerboard {
+            background-color: #11131f;
+            background-image: 
+                linear-gradient(45deg, #1b1e30 25%, transparent 25%), 
+                linear-gradient(-45deg, #1b1e30 25%, transparent 25%), 
+                linear-gradient(45deg, transparent 75%, #1b1e30 75%), 
+                linear-gradient(-45deg, transparent 75%, #1b1e30 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0;
+        }
+
+        @keyframes pulse-border {
+            0%, 100% { border-color: rgba(0, 243, 255, 0.4); }
+            50% { border-color: rgba(0, 243, 255, 0.9); }
+        }
+
+        .animate-neon-border {
+            animation: pulse-border 2.5s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-between p-4 sm:p-6 antialiased selection:bg-cyber-blue selection:text-black">
+
+    <!-- Main Container -->
+    <div class="w-full max-w-2xl mx-auto flex flex-col gap-6 my-auto">
+        
+        <!-- Header -->
+        <header class="text-center space-y-2 pt-2">
+            <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-cyber-card border border-cyber-blue/30 text-cyber-blue text-xs font-medium tracking-wider uppercase shadow-neon-inner">
+                <span class="w-2 h-2 rounded-full bg-cyber-blue animate-ping"></span>
+                100% On-Device Edge AI
+            </div>
+            <h1 class="font-cyber text-2xl sm:text-4xl font-extrabold tracking-tight text-transparent bg-clip-text bg-gradient-to-r from-white via-cyber-blue to-cyan-400 drop-shadow-[0_0_12px_rgba(0,243,255,0.4)]">
+                Google AI BG Remover (Offline)
+            </h1>
+            <p class="text-slate-400 text-xs sm:text-sm max-w-md mx-auto">
+                Instant studio-grade subject isolation powered by MediaPipe Neural Segmentation. Zero server uploads.
+            </p>
+        </header>
+
+        <!-- App Card -->
+        <main class="bg-cyber-card/90 backdrop-blur-xl border border-cyber-border rounded-2xl p-5 sm:p-7 shadow-2xl space-y-6 relative overflow-hidden">
+            <!-- Subtle top neon line -->
+            <div class="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-transparent via-cyber-blue to-transparent opacity-80"></div>
+
+            <!-- File Upload Dropzone -->
+            <div id="drop-zone" class="relative group cursor-pointer rounded-xl border-2 border-dashed border-slate-700 hover:border-cyber-blue bg-cyber-bg/60 hover:bg-cyber-blue/5 transition-all duration-300 p-6 sm:p-8 text-center flex flex-col items-center justify-center gap-3">
+                <input type="file" id="image-input" accept="image/*" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" aria-label="Upload image">
+                
+                <div class="w-14 h-14 rounded-2xl bg-cyber-card border border-cyber-blue/40 flex items-center justify-center text-cyber-blue group-hover:scale-110 group-hover:shadow-neon transition-all duration-300">
+                    <svg class="w-7 h-7" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                    </svg>
+                </div>
+                
+                <div>
+                    <p class="text-sm sm:text-base font-semibold text-slate-200 group-hover:text-cyber-blue transition-colors">
+                        Tap to Upload or Drag & Drop Image
+                    </p>
+                    <p id="file-name-display" class="text-xs text-slate-500 mt-1">
+                        Supports PNG, JPG, WEBP (Full HD Resolution)
+                    </p>
+                </div>
+            </div>
+
+            <!-- Hidden Image Element for MediaPipe Input -->
+            <img id="hidden-source-image" alt="Hidden Source" crossorigin="anonymous" class="hidden" />
+
+            <!-- Primary Action Button -->
+            <div class="flex flex-col sm:flex-row gap-3">
+                <button id="remove-bg-btn" disabled class="w-full py-3.5 px-6 rounded-xl font-bold text-sm sm:text-base tracking-wide text-slate-950 bg-gradient-to-r from-cyber-blue to-cyan-400 hover:from-cyan-300 hover:to-cyber-blue disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none shadow-neon hover:shadow-neon-strong active:scale-[0.99] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer">
+                    <span>Remove Background 🪄</span>
+                </button>
+            </div>
+
+            <!-- Status Text Area -->
+            <div id="status-container" class="flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-xl bg-cyber-bg/80 border border-cyber-border text-xs sm:text-sm font-medium text-cyan-300">
+                <span id="status-spinner" class="w-4 h-4 border-2 border-cyber-blue border-t-transparent rounded-full animate-spin"></span>
+                <span id="status-text">Initializing MediaPipe AI Engine...</span>
+            </div>
+
+            <!-- Result Canvas Preview Area -->
+            <div id="result-section" class="hidden space-y-4 pt-2 border-t border-cyber-border/80">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+                        Segmented Output
+                    </span>
+                    <span id="resolution-badge" class="text-[11px] font-mono px-2.5 py-0.5 rounded-md bg-cyber-bg border border-cyber-border text-cyber-blue">
+                        0 × 0 px
+                    </span>
+                </div>
+
+                <!-- Checkerboard Canvas Wrapper -->
+                <div class="relative w-full rounded-xl overflow-hidden border border-cyber-blue/40 checkerboard flex items-center justify-center min-h-[240px] max-h-[60vh] p-2 shadow-neon-inner">
+                    <canvas id="output-canvas" class="max-w-full max-h-[56vh] w-auto h-auto object-contain rounded-lg"></canvas>
+                </div>
+
+                <!-- Download & Reset Actions -->
+                <div class="flex flex-col sm:flex-row gap-3 pt-1">
+                    <button id="download-btn" class="flex-1 py-3.5 px-6 rounded-xl font-bold text-sm sm:text-base text-cyber-blue bg-cyber-blue/10 hover:bg-cyber-blue/20 border border-cyber-blue shadow-neon hover:shadow-neon-strong active:scale-[0.99] transition-all duration-200 flex items-center justify-center gap-2 cursor-pointer">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        <span>Download HD</span>
+                    </button>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="text-center text-xs text-slate-500 pb-2">
+            Offline-Ready PWA • Powered by Google MediaPipe Selfie Segmentation
+        </footer>
+    </div>
+
+    <script>
+        /**
+         * Offline AI Background Remover Application Logic
+         * Uses Google MediaPipe SelfieSegmentation with HTML5 Canvas compositing
+         */
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM Elements
+            const imageInput = document.getElementById('image-input');
+            const dropZone = document.getElementById('drop-zone');
+            const fileNameDisplay = document.getElementById('file-name-display');
+            const hiddenImage = document.getElementById('hidden-source-image');
+            const removeBgBtn = document.getElementById('remove-bg-btn');
+            const statusText = document.getElementById('status-text');
+            const statusSpinner = document.getElementById('status-spinner');
+            const statusContainer = document.getElementById('status-container');
+            const resultSection = document.getElementById('result-section');
+            const outputCanvas = document.getElementById('output-canvas');
+            const resolutionBadge = document.getElementById('resolution-badge');
+            const downloadBtn = document.getElementById('download-btn');
+
+            const ctx = outputCanvas.getContext('2d');
+
+            // Application State
+            let selfieSegmentation = null;
+            let isModelReady = false;
+            let isImageLoaded = false;
+            let isProcessing = false;
+            let currentFileName = 'ai-cutout';
+
+            /**
+             * Updates the UI status banner cleanly without blocking alerts
+             */
+            function updateStatus(message, type = 'info', showSpinner = false) {
+                statusText.textContent = message;
+                statusSpinner.classList.toggle('hidden', !showSpinner);
+
+                statusContainer.className = 'flex items-center justify-center gap-2.5 py-2.5 px-4 rounded-xl bg-cyber-bg/80 border text-xs sm:text-sm font-medium transition-colors ';
+                if (type === 'error') {
+                    statusContainer.classList.add('border-rose-500/60', 'text-rose-400');
+                } else if (type === 'success') {
+                    statusContainer.classList.add('border-emerald-500/50', 'text-emerald-300');
+                } else {
+                    statusContainer.classList.add('border-cyber-blue/40', 'text-cyan-300');
+                }
+            }
+
+            /**
+             * Updates button interactive state
+             */
+            function syncButtonState() {
+                removeBgBtn.disabled = !(isModelReady && isImageLoaded && !isProcessing);
+            }
+
+            /**
+             * Canvas Compositing Callback executed when MediaPipe finishes inference
+             */
+            function onSegmentationResults(results) {
+                try {
+                    const width = hiddenImage.naturalWidth || results.image.width;
+                    const height = hiddenImage.naturalHeight || results.image.height;
+
+                    // Set exact HD dimensions on output canvas
+                    outputCanvas.width = width;
+                    outputCanvas.height = height;
+
+                    // Clear canvas state
+                    ctx.save();
+                    ctx.clearRect(0, 0, width, height);
+
+                    // 1. Draw the original full-resolution image
+                    ctx.drawImage(results.image, 0, 0, width, height);
+
+                    // 2. Apply destination-in compositing to keep only pixels matching the person mask
+                    ctx.globalCompositeOperation = 'destination-in';
+                    ctx.drawImage(results.segmentationMask, 0, 0, width, height);
+
+                    // Restore default composite operation
+                    ctx.restore();
+
+                    // Reveal output section & update resolution badge
+                    resolutionBadge.textContent = `${width} × ${height} px`;
+                    resultSection.classList.remove('hidden');
+
+                    isProcessing = false;
+                    syncButtonState();
+                    updateStatus('Background removed! Ready for HD download.', 'success', false);
+                } catch (err) {
+                    console.error('Canvas compositing error:', err);
+                    isProcessing = false;
+                    syncButtonState();
+                    updateStatus('Failed to composite image mask.', 'error', false);
+                }
+            }
+
+            /**
+             * Initializes Google MediaPipe Selfie Segmentation
+             */
+            async function initMediaPipe() {
+                try {
+                    updateStatus('Loading MediaPipe Neural Model...', 'info', true);
+
+                    selfieSegmentation = new SelfieSegmentation({
+                        locateFile: (file) => {
+                            return `https://cdn.jsdelivr.net/npm/@mediapipe/selfie_segmentation/${file}`;
+                        }
+                    });
+
+                    selfieSegmentation.setOptions({
+                        modelSelection: 1 // 1 = General/Landscape high-accuracy model
+                    });
+
+                    selfieSegmentation.onResults(onSegmentationResults);
+
+                    // Pre-initialize WASM/WebGL runtime so first click is instantaneous
+                    await selfieSegmentation.initialize();
+
+                    isModelReady = true;
+                    syncButtonState();
+                    updateStatus(
+                        isImageLoaded
+                            ? 'AI Model ready. Click "Remove Background 🪄".'
+                            : 'AI Engine Ready. Upload an image to begin.',
+                        'success',
+                        false
+                    );
+                } catch (error) {
+                    console.error('MediaPipe Initialization Error:', error);
+                    updateStatus('Error loading AI model. Check network on first load.', 'error', false);
+                }
+            }
+
+            /**
+             * Handles user file selection and loads image into hidden <img>
+             */
+            function handleImageFile(file) {
+                if (!file || !file.type.startsWith('image/')) {
+                    updateStatus('Please select a valid image file (PNG, JPG, WEBP).', 'error', false);
+                    return;
+                }
+
+                // Store clean base filename for HD download
+                const dotIndex = file.name.lastIndexOf('.');
+                currentFileName = dotIndex > 0 ? file.name.substring(0, dotIndex) : file.name;
+                fileNameDisplay.textContent = `Selected: ${file.name}`;
+                fileNameDisplay.classList.remove('text-slate-500');
+                fileNameDisplay.classList.add('text-cyber-blue', 'font-medium');
+
+                updateStatus('Loading image into memory...', 'info', true);
+
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    hiddenImage.onload = () => {
+                        isImageLoaded = true;
+                        syncButtonState();
+
+                        // Preview original image on canvas prior to removal
+                        outputCanvas.width = hiddenImage.naturalWidth;
+                        outputCanvas.height = hiddenImage.naturalHeight;
+                        ctx.clearRect(0, 0, outputCanvas.width, outputCanvas.height);
+                        ctx.drawImage(hiddenImage, 0, 0);
+                        resolutionBadge.textContent = `${hiddenImage.naturalWidth} × ${hiddenImage.naturalHeight} px`;
+                        resultSection.classList.remove('hidden');
+
+                        if (isModelReady) {
+                            updateStatus('Image loaded! Click "Remove Background 🪄".', 'success', false);
+                        } else {
+                            updateStatus('Image loaded. Waiting for AI engine...', 'info', true);
+                        }
+                    };
+                    hiddenImage.onerror = () => {
+                        isImageLoaded = false;
+                        syncButtonState();
+                        updateStatus('Could not decode the selected image.', 'error', false);
+                    };
+                    hiddenImage.src = event.target.result;
+                };
+                reader.onerror = () => {
+                    updateStatus('Error reading file from device.', 'error', false);
+                };
+                reader.readAsDataURL(file);
+            }
+
+            // Event Listeners: File Input & Drag/Drop
+            imageInput.addEventListener('change', (e) => {
+                if (e.target.files && e.target.files[0]) {
+                    handleImageFile(e.target.files[0]);
+                }
+            });
+
+            ['dragenter', 'dragover'].forEach(evtName => {
+                dropZone.addEventListener(evtName, (e) => {
+                    e.preventDefault();
+                    dropZone.classList.add('border-cyber-blue', 'bg-cyber-blue/10');
+                });
+            });
+
+            ['dragleave', 'drop'].forEach(evtName => {
+                dropZone.addEventListener(evtName, (e) => {
+                    e.preventDefault();
+                    dropZone.classList.remove('border-cyber-blue', 'bg-cyber-blue/10');
+                });
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                    handleImageFile(e.dataTransfer.files[0]);
+                }
+            });
+
+            // Event Listener: Remove Background Trigger
+            removeBgBtn.addEventListener('click', async () => {
+                if (!isModelReady || !isImageLoaded || isProcessing) return;
+
+                try {
+                    isProcessing = true;
+                    syncButtonState();
+                    updateStatus('Processing... Isolating subject with Edge AI...', 'info', true);
+
+                    // Allow UI paint before running segmentation
+                    await new Promise(resolve => requestAnimationFrame(resolve));
+                    await selfieSegmentation.send({ image: hiddenImage });
+                } catch (err) {
+                    console.error('Segmentation inference error:', err);
+                    isProcessing = false;
+                    syncButtonState();
+                    updateStatus('Processing failed. Please try another image.', 'error', false);
+                }
+            });
+
+            // Event Listener: Download HD Transparent PNG
+            downloadBtn.addEventListener('click', () => {
+                if (!outputCanvas.width || !outputCanvas.height) return;
+
+                outputCanvas.toBlob((blob) => {
+                    if (!blob) {
+                        updateStatus('Failed to generate PNG file.', 'error', false);
+                        return;
+                    }
+                    const url = URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = `${currentFileName}-no-bg.png`;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                    updateStatus('HD PNG downloaded successfully!', 'success', false);
+                }, 'image/png', 1.0);
+            });
+
+            /**
+             * Register Dynamic Web App Manifest & Offline Service Worker
+             * Enables installable PWA experience and caches MediaPipe WASM/CDN assets
+             */
+            function setupOfflinePWA() {
+                try {
+                    const manifestData = {
+                        name: 'Google AI BG Remover (Offline)',
+                        short_name: 'AI BG Remover',
+                        start_url: '.',
+                        display: 'standalone',
+                        background_color: '#05050a',
+                        theme_color: '#00f3ff',
+                        icons: [
+                            {
+                                src: 'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192"><rect width="192" height="192" rx="40" fill="%2305050a"/><circle cx="96" cy="96" r="64" fill="none" stroke="%2300f3ff" stroke-width="12"/><path d="M72 96l16 16 32-32" fill="none" stroke="%2300f3ff" stroke-width="12" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+                                sizes: '192x192',
+                                type: 'image/svg+xml'
+                            }
+                        ]
+                    };
+                    const manifestBlob = new Blob([JSON.stringify(manifestData)], { type: 'application/manifest+json' });
+                    document.getElementById('pwa-manifest').href = URL.createObjectURL(manifestBlob);
+
+                    if ('serviceWorker' in navigator && (window.location.protocol === 'https:' || window.location.hostname === 'localhost')) {
+                        const swCode = `
+                            const CACHE_NAME = 'ai-bg-remover-v1';
+                            self.addEventListener('install', (e) => self.skipWaiting());
+                            self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()));
+                            self.addEventListener('fetch', (e) => {
+                                if (e.request.method !== 'GET') return;
+                                e.respondWith(
+                                    caches.match(e.request).then((cached) => {
+                                        const fetched = fetch(e.request).then((response) => {
+                                            if (response && response.status === 200) {
+                                                const clone = response.clone();
+                                                caches.open(CACHE_NAME).then((cache) => cache.put(e.request, clone));
+                                            }
+                                            return response;
+                                        }).catch(() => cached);
+                                        return cached || fetched;
+                                    })
+                                );
+                            });
+                        `;
+                        const swBlob = new Blob([swCode], { type: 'application/javascript' });
+                        navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(() => {});
+                    }
+                } catch (e) {
+                    // Gracefully ignore PWA registration if sandboxed
+                }
+            }
+
+            // Boot Application
+            setupOfflinePWA();
+            initMediaPipe();
+        });
+    </script>
+</body>
+</html>
